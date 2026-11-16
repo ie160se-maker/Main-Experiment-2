@@ -5,7 +5,9 @@
       教示から「十分に読まないと次に進めない」の記述を削除。閲覧時間の記録は第1期と同じ。
    2. スクリーニング：「以前この調査に回答したか」を追加。対象外（年齢・Instagram 頻度・回答歴）の人は
       ダミー質問（保存しない）のあと確認コードを表示。カウンタは使わない。
-   3. 確認コード：COMPLETION_CODES に設定。事後説明で使用に同意しなかった人にも同じコードを表示する。
+   3. 確認コード：1人ずつ異なる4文字の半角英数字（2026-11-16 変更。makeCode を参照）。
+      事後説明で使用に同意しなかった人にも表示する。照合のため、コードを CSV（completion_code）と
+      対象外の人の記録（<pid>_screenout.json）に保存する。
    4. 同意文：募集元・謝礼・質問が人により異なる場合があること・ワーカーIDを収集しないことを追記。
    5. CSV に phase（=2）・prior_part・viewed_all を追加（datasink_p2.js）。
    自由記述の帰属（30秒・空欄不可）と、測定項目・順序は第1期と同一。
@@ -28,13 +30,15 @@
   const CTX = { cause: B.CAUSE[BRAND], brand: B.BRAND[BRAND], likMin: B.LIK.min, likMax: B.LIK.max };
   const CONTACT = 'un131miworld@stu.kanazawa-u.ac.jp';
 
-  // ★確認コード（委託先の指定に合わせて差し替える）
-  //   main      ：最後まで回答した人（事後説明で使用に「同意しない」を選んだ人を含む）
-  //   screenout ：スクリーニング対象外でダミー質問に答えた人
-  //   委託先がコードを1種類しか使わない場合は、両方に同じ文字列を入れる。
-  const COMPLETION_CODES = { main: 'REPLACE_MAIN_CODE', screenout: 'REPLACE_SCREENOUT_CODE' };
-  // true にすると、コードの末尾に参加者IDの末尾4文字を付ける（委託先が1人ずつ異なるコードを求める場合）
-  const CODE_WITH_ID = false;
+  // ★確認コード（2026-11-16 委託先の指示：合致者・非合致者とも2〜4文字の半角英数字。スマホで手打ちするため）
+  //   1人ずつ異なる4文字のコードを発行する。見間違えやすい文字（0, 1, O, I, L, Z）は使わない。
+  //   main      ：最後まで回答した人（使用に同意しなかった人を含む）→ 先頭が数字（例：7K4P）
+  //   screenout ：スクリーニング対象外の人                         → 先頭が英字（例：HR3W）
+  //   main は DataPipe のカウンタ番号を2・3文字目に埋め込むため、カウンタ番号が 900 未満の間は重複しない。
+  //   カウンタがない場合（不通時の割当・テスト）と screenout は乱数のみ（重複はまれだが起こりうる → 照合は時刻で補う）。
+  const CODE_DIGITS = '23456789';
+  const CODE_LETTERS = 'ABCDEFGHJKMNPQRSTUVWXY';
+  const CODE_CHARS = CODE_DIGITS + CODE_LETTERS;   // 30文字
   // ★第2期の閲覧条件：秒数の下限なし（5枚すべてへの到達だけを条件にする）
   const GATE = { minSlideMs: 0, minSlide4Ms: 0 };
 
@@ -98,13 +102,26 @@
     screenConsent();
   }
 
-  function makeCode(kind, pid) {
-    const base = COMPLETION_CODES[kind];
-    return CODE_WITH_ID ? base + '-' + String(pid).slice(-4).toUpperCase() : base;
+  function randIndex(n) {
+    try { const a = new Uint32Array(1); global.crypto.getRandomValues(a); return a[0] % n; }
+    catch (e) { return Math.floor(Math.random() * n); }
+  }
+  function pick(chars) { return chars[randIndex(chars.length)]; }
+  // kind = 'main' | 'screenout'。counter はカウンタ番号（なければ null）
+  function makeCode(kind, counter) {
+    const L = CODE_CHARS.length;
+    if (kind === 'main') {
+      const n = Number(counter);
+      if (counter !== '' && counter !== null && counter !== undefined && Number.isInteger(n) && n >= 0 && n < L * L) {
+        return pick(CODE_DIGITS) + CODE_CHARS[Math.floor(n / L)] + CODE_CHARS[n % L] + pick(CODE_CHARS);
+      }
+      return pick(CODE_DIGITS) + pick(CODE_CHARS) + pick(CODE_CHARS) + pick(CODE_CHARS);
+    }
+    return pick(CODE_LETTERS) + pick(CODE_CHARS) + pick(CODE_CHARS) + pick(CODE_CHARS);
   }
   function codeBlock(code) {
-    return '<p class="code">確認コード：<strong>' + esc(code) + '</strong></p>' +
-      '<p class="small">このコードを募集元のページに入力してください。</p>';
+    return '<p class="code">確認コード：<strong style="letter-spacing:.15em">' + esc(code) + '</strong></p>' +
+      '<p class="small">このコード（半角英数字4文字）を募集元のページに入力してください。英字は大文字・小文字のどちらで入力しても構いません。</p>';
   }
 
   function screenAlreadyDone() {
@@ -160,7 +177,7 @@
       const v = R.collect(root);
       const age = parseInt(v.age, 10), insta = parseInt(v.insta_freq, 10);
       if (isNaN(age) || age < 18 || age > 29 || insta < B.insta_MIN_FREQ || v.prior_part !== 'いいえ') {
-        screenDummy();   // 対象外：ダミー質問 → 確認コード（保存しない・カウンタを使わない）
+        screenDummy();   // 対象外：ダミー質問 → 確認コード（回答は保存しない・カウンタを使わない）
         return;
       }
       STATE.age = age; STATE.insta_freq = insta; STATE.prior_part = v.prior_part;
@@ -168,17 +185,20 @@
     };
   }
 
-  /* ---------- スクリーニング対象外：ダミー質問（保存しない）→ 確認コード ---------- */
+  /* ---------- スクリーニング対象外：ダミー質問（回答は保存しない）→ 確認コード
+       照合のため、確認コードと時刻だけを <pid>_screenout.json に保存する（回答は含めない） ---------- */
   function screenDummy() {
     show('<div class="screen"><h1>SNSの利用についてお聞きします</h1><div class="qform" id="dumForm">' +
       B.dummy.map(function (it) { return R.item(it, CTX); }).join('') +
       '</div><div class="actions"><button class="btn" id="dumNext">次へ</button></div></div>');
-    document.getElementById('dumNext').onclick = function () {
+    document.getElementById('dumNext').onclick = async function () {
       const root = document.getElementById('dumForm');
       const miss = R.firstMissing(root, B.dummy.map(function (it) { return it.id; }));
       if (miss) { R.markMissing(root, miss); return; }
-      const code = makeCode('screenout', STATE.participant_id);
+      this.disabled = true;
+      const code = makeCode('screenout', null);
       A.markScreenedOut(STATE.participant_id, code);
+      try { await global.DataSink.saveScreenout(STATE, code); } catch (e) { /* 保存に失敗してもコードは表示する */ }
       show('<div class="screen"><h1>ご協力ありがとうございました</h1><p>これで調査は終了です。</p>' + codeBlock(code) + '</div>');
     };
   }
@@ -375,16 +395,17 @@
     STATE.ts_end = new Date().toISOString();
     STATE.duration_total_sec = Math.round((Date.parse(STATE.ts_end) - Date.parse(STATE.ts_start)) / 1000);
     computeFlags();
+    if (!STATE.completion_code) STATE.completion_code = makeCode('main', STATE.counter_index);   // 再送信でも同じコード
     let ok = false;
     try { ok = await global.DataSink.submitFinal(STATE); } catch (e) { ok = false; }
-    if (ok) { finished = true; STATE.code = makeCode('main', STATE.participant_id); A.markCompleted(STATE.code); screenThanks(); }
+    if (ok) { finished = true; A.markCompleted(STATE.completion_code); screenThanks(); }
     else screenError();
   }
 
   function screenThanks() {
     const html = '<div class="screen"><h1>ご協力ありがとうございました</h1>' +
       (STATE.consentRefused ? '<p>ご回答は保存せず、研究には使用しません。</p>' : '<p>これで調査は終了です。ご協力に感謝いたします。</p>') +
-      codeBlock(STATE.code) +
+      codeBlock(STATE.completion_code) +
       (A.TEST_MODE ? '<details open><summary>テストモード：保存されるはずのデータ</summary><pre id="testOut" style="white-space:pre-wrap;font-size:11px"></pre></details>' : '') +
       '</div>';
     show(html);
