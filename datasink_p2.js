@@ -7,7 +7,9 @@
        viewed_all  ：5枚すべてに到達したか（1/0）
      forced_pass は第2期の「質問へ進む」の条件（5枚すべてに到達、秒数の下限なし）を満たしたか。
      第1期の forced_pass（各2秒・4枚目5秒）とは意味が異なる点に注意。
-   ・スクリーニング対象外の人のデータ（ダミー質問を含む）は保存しない。
+   ・確認コード（2026-11-16 追加）：1人ずつ異なるコードを、委託先から提出されたコードとの照合に使う。
+       最後まで回答した人：CSV の末尾の completion_code（使用に同意しなかった人の最小限の行にも入れる）。
+       スクリーニング対象外の人：<pid>_screenout.json（参加者ID・時期・コード・時刻のみ。回答は保存しない）。
    それ以外（進行記録に回答を含めない・使用を断った人は最小限の行・テストモード）は第1期と同じ。
    ============================================================ */
 (function (global) {
@@ -47,6 +49,13 @@
     return postToDataPipe(state.participant_id + '_ckpt' + stage + '.json', JSON.stringify(rec));
   }
 
+  /* ---------- スクリーニング対象外の人：確認コードの記録（回答は含めない） ---------- */
+  async function saveScreenout(state, code) {
+    const rec = { participant_id: state.participant_id, phase: def(state.phase), screened_out: 1,
+      completion_code: code, test_mode: def(state.test_mode), ts: new Date().toISOString() };
+    return postToDataPipe(state.participant_id + '_screenout.json', JSON.stringify(rec));
+  }
+
   /* ---------- 最終保存 ---------- */
   async function submitFinal(state) {
     return postToDataPipe(state.participant_id + '.csv', stateToCSV(state));
@@ -80,7 +89,9 @@
     // 品質フラグ（クライアント算出。所要時間の基準は解析側で判定）
     ['flag_attn_fail', 'n_straightline_scales', 'flag_straightline', 'flag_straightline_one'],
     // ★第2期で追加
-    ['phase', 'prior_part', 'viewed_all']
+    ['phase', 'prior_part', 'viewed_all'],
+    // ★2026-11-16 追加：確認コード（委託先の提出コードとの照合用）
+    ['completion_code']
   );
 
   function stateToCSV(state) {
@@ -92,7 +103,7 @@
   function minimalRow(s) {
     const r = {};
     ['participant_id', 'cell', 'likes_level', 'disclosure', 'counter_index', 'table_seed', 'use_table',
-     'assignment_fallback', 'resumed_session', 'test_mode', 'ts_start', 'ts_assigned', 'ts_end', 'phase']
+     'assignment_fallback', 'resumed_session', 'test_mode', 'ts_start', 'ts_assigned', 'ts_end', 'phase', 'completion_code']
       .forEach(function (k) { r[k] = def(s[k]); });
     r.post_debrief_consent = 0;
     return r;
@@ -128,5 +139,5 @@
   }
   function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
-  global.DataSink = { saveCheckpoint, submitFinal, stateToCSV, COLUMNS };
+  global.DataSink = { saveCheckpoint, saveScreenout, submitFinal, stateToCSV, COLUMNS };
 })(window);
