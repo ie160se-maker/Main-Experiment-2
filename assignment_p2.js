@@ -14,7 +14,7 @@
   'use strict';
 
   // ★第2期用に新しく作成した DataPipe 実験IDに差し替える（第1期のIDは使わない）
-  const EXPERIMENT_ID = 'REPLACE_WITH_PHASE2_EXPERIMENT_ID';
+  const EXPERIMENT_ID = 'pwCFjyFRkGNY';
   const CONDITION_URL = 'https://pipe.jspsych.org/api/condition/';
   const PHASE = 2;
   const ID_PREFIX = 'w-';
