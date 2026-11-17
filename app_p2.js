@@ -121,7 +121,7 @@
   }
   function codeBlock(code) {
     return '<p class="code">確認コード：<strong style="letter-spacing:.15em">' + esc(code) + '</strong></p>' +
-      '<p class="small">このコード（半角英数字4文字）を募集元のページに入力してください。英字は大文字・小文字のどちらで入力しても構いません。</p>';
+      '<p class="small">このコードを募集元のページに入力してください。</p>';
   }
 
   function screenAlreadyDone() {
