@@ -168,19 +168,19 @@
   /* ---------- スクリーニング ---------- */
   function screenScreening() {
     show('<div class="screen"><h1>はじめに</h1><div class="qform" id="scrForm">' +
-      R.item(B.screening.age, {}, 'number') + R.item(B.screening.insta, {}, 'freq5') + R.item(B.screening.prior, {}, 'mc') +
+      R.item(B.screening.age, {}, 'number') + R.item(B.screening.insta, {}, 'freq5') +
       '</div><div class="actions"><button class="btn" id="scrNext">次へ</button></div></div>');
     document.getElementById('scrNext').onclick = function () {
       const root = document.getElementById('scrForm');
-      const miss = R.firstMissing(root, ['age', 'insta_freq', 'prior_part']);
+      const miss = R.firstMissing(root, ['age', 'insta_freq']);
       if (miss) { R.markMissing(root, miss); return; }
       const v = R.collect(root);
       const age = parseInt(v.age, 10), insta = parseInt(v.insta_freq, 10);
-      if (isNaN(age) || age < 18 || age > 29 || insta < B.insta_MIN_FREQ || v.prior_part !== 'いいえ') {
+      if (isNaN(age) || age < 18 || age > 29 || insta < B.insta_MIN_FREQ) {
         screenDummy();   // 対象外：ダミー質問 → 確認コード（回答は保存しない・カウンタを使わない）
         return;
       }
-      STATE.age = age; STATE.insta_freq = insta; STATE.prior_part = v.prior_part;
+      STATE.age = age; STATE.insta_freq = insta;
       assignAndContinue();   // 適格者だけがカウンタ番号を消費する
     };
   }
