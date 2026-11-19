@@ -3,12 +3,14 @@
    第1期（app_v3.js）からの変更点（2026-11-16）
    1. 刺激：「質問へ進む」の条件を「5枚すべてに到達」だけにした（秒数の下限なし。委託先の条件）。
       教示から「十分に読まないと次に進めない」の記述を削除。閲覧時間の記録は第1期と同じ。
-   2. スクリーニング：「以前この調査に回答したか」を追加。対象外（年齢・Instagram 頻度・回答歴）の人は
+   2. スクリーニング：対象外（年齢・Instagram 頻度）の人は（「以前この調査に回答したか」の項目は 2026-11-17 に削除）
       ダミー質問（保存しない）のあと確認コードを表示。カウンタは使わない。
-   3. 確認コード：1人ずつ異なる4文字の半角英数字（2026-11-16 変更。makeCode を参照）。
-      事後説明で使用に同意しなかった人にも表示する。照合のため、コードを CSV（completion_code）と
-      対象外の人の記録（<pid>_screenout.json）に保存する。
+   3. 確認コード（2026-11-19 変更）：全員共通の固定コード。最後まで回答した人は 6223、対象外の人は 4815。
+      CSV（completion_code）と対象外の人の記録（<pid>_screenout.json）にも保存する。
    4. 同意文：募集元・謝礼・質問が人により異なる場合があること・ワーカーIDを収集しないことを追記。
+   6. 事後説明（2026-11-19 変更）：「回答の使用に同意する／しない」の選択をなくし、事後説明を読んだあと
+      「送信して終了する」で保存し、確認コードを表示する。post_debrief_consent は空欄になる。
+      同意文から、事後説明後に使用の同意を選べるという記述を削除した。
    5. CSV に phase（=2）・prior_part・viewed_all を追加（datasink_p2.js）。
    自由記述の帰属（30秒・空欄不可）と、測定項目・順序は第1期と同一。
    ------------------------------------------------------------
@@ -30,15 +32,10 @@
   const CTX = { cause: B.CAUSE[BRAND], brand: B.BRAND[BRAND], likMin: B.LIK.min, likMax: B.LIK.max };
   const CONTACT = 'un131miworld@stu.kanazawa-u.ac.jp';
 
-  // ★確認コード（2026-11-16 委託先の指示：合致者・非合致者とも2〜4文字の半角英数字。スマホで手打ちするため）
-  //   1人ずつ異なる4文字のコードを発行する。見間違えやすい文字（0, 1, O, I, L, Z）は使わない。
-  //   main      ：最後まで回答した人（使用に同意しなかった人を含む）→ 先頭が数字（例：7K4P）
-  //   screenout ：スクリーニング対象外の人                         → 先頭が英字（例：HR3W）
-  //   main は DataPipe のカウンタ番号を2・3文字目に埋め込むため、カウンタ番号が 900 未満の間は重複しない。
-  //   カウンタがない場合（不通時の割当・テスト）と screenout は乱数のみ（重複はまれだが起こりうる → 照合は時刻で補う）。
-  const CODE_DIGITS = '23456789';
-  const CODE_LETTERS = 'ABCDEFGHJKMNPQRSTUVWXY';
-  const CODE_CHARS = CODE_DIGITS + CODE_LETTERS;   // 30文字
+  // ★確認コード（2026-11-19：全員共通の固定コード。委託先の指示は2〜4文字の半角英数字）
+  //   main      ：すべての質問に回答した人
+  //   screenout ：スクリーニング対象外の人
+  const COMPLETION_CODES = { main: '6223', screenout: '4815' };
   // ★第2期の閲覧条件：秒数の下限なし（5枚すべてへの到達だけを条件にする）
   const GATE = { minSlideMs: 0, minSlide4Ms: 0 };
 
@@ -102,26 +99,11 @@
     screenConsent();
   }
 
-  function randIndex(n) {
-    try { const a = new Uint32Array(1); global.crypto.getRandomValues(a); return a[0] % n; }
-    catch (e) { return Math.floor(Math.random() * n); }
-  }
-  function pick(chars) { return chars[randIndex(chars.length)]; }
-  // kind = 'main' | 'screenout'。counter はカウンタ番号（なければ null）
-  function makeCode(kind, counter) {
-    const L = CODE_CHARS.length;
-    if (kind === 'main') {
-      const n = Number(counter);
-      if (counter !== '' && counter !== null && counter !== undefined && Number.isInteger(n) && n >= 0 && n < L * L) {
-        return pick(CODE_DIGITS) + CODE_CHARS[Math.floor(n / L)] + CODE_CHARS[n % L] + pick(CODE_CHARS);
-      }
-      return pick(CODE_DIGITS) + pick(CODE_CHARS) + pick(CODE_CHARS) + pick(CODE_CHARS);
-    }
-    return pick(CODE_LETTERS) + pick(CODE_CHARS) + pick(CODE_CHARS) + pick(CODE_CHARS);
-  }
+  // kind = 'main' | 'screenout'
+  function makeCode(kind) { return COMPLETION_CODES[kind]; }
   function codeBlock(code) {
     return '<p class="code">確認コード：<strong style="letter-spacing:.15em">' + esc(code) + '</strong></p>' +
-      '<p class="small">このコードを募集元のページに入力してください。</p>';
+      '<p class="small">このコード（半角数字4桁）を募集元のページに入力してください。</p>';
   }
 
   function screenAlreadyDone() {
@@ -149,8 +131,8 @@
       '<h2 class="sec">6. 参加の任意性と撤回について</h2>' +
       '<ul class="notes"><li>参加は任意です。参加しないことによる不利益は一切ありません。</li>' +
       '<li>回答の途中でいつでも中断できます。中断された場合、それまでの回答は使用しません。中断された場合の謝礼の扱いは、募集元の規定に従います。</li>' +
-      '<li>回答の最後に研究の詳しい説明をお読みいただいたうえで、回答を研究に使用することに同意するかどうかを選んでいただけます。同意されない場合、回答は保存しません。同意されない場合も確認コードは表示され、謝礼に影響はありません。</li>' +
-      '<li>使用に同意して送信された回答は匿名のため、後から個々のデータを特定して削除することはできません。</li></ul>' +
+      '<li>回答の最後に、研究の詳しい目的をご説明します。</li>' +
+      '<li>最後まで回答して送信された回答は匿名のため、後から個々のデータを特定して削除することはできません。</li></ul>' +
       '<h2 class="sec">7. 予想される負担・リスク</h2>' +
       '<p>本調査による身体的・心理的な負担は最小限ですが、回答したくない設問がある場合は、参加を中断していただいて構いません。</p>' +
       '<h2 class="sec">8. お問い合わせ先</h2>' +
@@ -196,7 +178,7 @@
       const miss = R.firstMissing(root, B.dummy.map(function (it) { return it.id; }));
       if (miss) { R.markMissing(root, miss); return; }
       this.disabled = true;
-      const code = makeCode('screenout', null);
+      const code = makeCode('screenout');
       A.markScreenedOut(STATE.participant_id, code);
       try { await global.DataSink.saveScreenout(STATE, code); } catch (e) { /* 保存に失敗してもコードは表示する */ }
       show('<div class="screen"><h1>ご協力ありがとうございました</h1><p>これで調査は終了です。</p>' + codeBlock(code) + '</div>');
@@ -357,7 +339,7 @@
     };
   }
 
-  /* ---------- 事後説明 → 使用への同意の選択 ---------- */
+  /* ---------- 事後説明（2026-11-19：使用への同意の選択は行わない）→ 送信 ---------- */
   function screenDebrief() {
     show(
       '<div class="screen"><h1>研究についてのご説明</h1>' +
@@ -367,12 +349,11 @@
       '<li>投稿に表示されていた<strong>「いいね」の数は、研究のために設定した数値</strong>です。参加者によって異なる数が表示されています。</li>' +
       '<li>企業の目的に関する文章は研究者が作成したもので、<strong>参加者によって異なる文章</strong>が表示されています。</li>' +
       '<li>2枚目の画像の<strong>「年間 約60万トン（出典：環境省 2023）」には実際の出典がなく、研究用に作成した架空の数値</strong>です。環境省が公表した数値ではありませんので、ご注意ください。</li></ul>' +
-      '<p>この説明をお読みいただいたうえで、あなたの回答を研究に使用することに同意いただけるかをお選びください。同意されない場合、回答は保存せず、研究には使用しません。どちらを選んでも不利益はありません。</p>' +
+      '<p>以上で説明は終わりです。下のボタンを押すと回答が送信され、確認コードが表示されます。</p>' +
       '<p class="small">ご質問は ' + CONTACT + ' までご連絡ください。</p>' +
-      '<div class="actions"><button class="btn secondary" id="refuseBtn">回答の使用に同意しない</button><button class="btn" id="consentBtn">回答の使用に同意する</button></div></div>'
+      '<div class="actions"><button class="btn" id="submitBtn">送信して終了する</button></div></div>'
     );
-    document.getElementById('consentBtn').onclick = function () { pageSec('debrief'); STATE.post_debrief_consent = 1; STATE.consentRefused = false; finish(); };
-    document.getElementById('refuseBtn').onclick = function () { pageSec('debrief'); STATE.post_debrief_consent = 0; STATE.consentRefused = true; finish(); };
+    document.getElementById('submitBtn').onclick = function () { this.disabled = true; pageSec('debrief'); STATE.consentRefused = false; finish(); };
   }
 
   /* ---------- フラグ算出・最終送信 ---------- */
@@ -395,7 +376,7 @@
     STATE.ts_end = new Date().toISOString();
     STATE.duration_total_sec = Math.round((Date.parse(STATE.ts_end) - Date.parse(STATE.ts_start)) / 1000);
     computeFlags();
-    if (!STATE.completion_code) STATE.completion_code = makeCode('main', STATE.counter_index);   // 再送信でも同じコード
+    STATE.completion_code = makeCode('main');
     let ok = false;
     try { ok = await global.DataSink.submitFinal(STATE); } catch (e) { ok = false; }
     if (ok) { finished = true; A.markCompleted(STATE.completion_code); screenThanks(); }
@@ -404,7 +385,7 @@
 
   function screenThanks() {
     const html = '<div class="screen"><h1>ご協力ありがとうございました</h1>' +
-      (STATE.consentRefused ? '<p>ご回答は保存せず、研究には使用しません。</p>' : '<p>これで調査は終了です。ご協力に感謝いたします。</p>') +
+      '<p>これで調査は終了です。ご協力に感謝いたします。</p>' +
       codeBlock(STATE.completion_code) +
       (A.TEST_MODE ? '<details open><summary>テストモード：保存されるはずのデータ</summary><pre id="testOut" style="white-space:pre-wrap;font-size:11px"></pre></details>' : '') +
       '</div>';
