@@ -103,7 +103,7 @@
   function makeCode(kind) { return COMPLETION_CODES[kind]; }
   function codeBlock(code) {
     return '<p class="code">確認コード：<strong style="letter-spacing:.15em">' + esc(code) + '</strong></p>' +
-      '<p class="small">このコード（半角数字4桁）を募集元のページに入力してください。</p>';
+      '<p class="small">このコードを保存して募集元のページに入力してください。</p>';
   }
 
   function screenAlreadyDone() {
